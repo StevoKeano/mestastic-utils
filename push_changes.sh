@@ -4,8 +4,17 @@ git config --global user.name "StevoKeano"
 git config --global user.email "ppsel03@gmail.com"
 git config --global --list
 
+# Start the SSH agent
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa  # Adjust if your key has a different name
+
 # Change to the directory where the Git repository is located
 cd /home/stevo/TC2-BBS-mesh/mestastic-utils || exit
+
+
+# Start the SSH agent
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa  # Adjust if your key has a different name
 
 
 # Check if a commit message is provided
