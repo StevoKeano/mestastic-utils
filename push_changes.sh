@@ -4,6 +4,10 @@ git config --global user.name "StevoKeano"
 git config --global user.email "ppsel03@gmail.com"
 git config --global --list
 
+# Change to the directory where the Git repository is located
+cd /home/stevo/TC2-BBS-mesh/mestastic-utils || exit
+
+
 # Check if a commit message is provided
 if [ -z "$1" ]; then
   echo "Usage: ./push_changes.sh 'Your commit message'"
