@@ -14,7 +14,7 @@ block_size = 512  # 512 bytes block size (standard block size for dd)
 bbsIP = "192.168.1.95"
 
 def remount_drive():
-    # Check if the drive is already mounted
+    """Remount the external drive if it is already mounted."""
     if is_mounted(mount_point):
         print(f"{mount_point} is already mounted.")
         send_meshtastic_message("The backup is complete. The BBS is back online.")
@@ -28,9 +28,8 @@ def remount_drive():
             print(f"Error remounting drive: {e}")
             sys.exit(1)
 
-
 def get_used_space():
-    # Use du to calculate the used space in the root filesystem, excluding /proc and other virtual filesystems
+    """Calculate the used space in the root filesystem, excluding virtual filesystems."""
     try:
         du_output = subprocess.check_output(
             ["sudo", "du", "-sx", "--exclude=/proc", "--exclude=/dev", "--exclude=/sys", "--block-size=1", "/"]
@@ -42,9 +41,11 @@ def get_used_space():
         sys.exit(1)
 
 def is_mounted(mount_point):
+    """Check if the specified mount point is already mounted."""
     return mount_point in subprocess.check_output(["mount"]).decode()
 
 def mount_drive():
+    """Mount the external drive at the specified mount point."""
     # Create the mount point if it doesn't exist
     if not os.path.exists(mount_point):
         try:
@@ -62,18 +63,18 @@ def mount_drive():
         sys.exit(1)
 
 def send_meshtastic_message(message):
+    """Send a message via Meshtastic."""
     try:
-        # Specify the host and port if using TCP
         subprocess.run(["/home/stevo/TC2-BBS-mesh/venv/bin/meshtastic", "--host", bbsIP, "--sendtext", message], check=True)
-        #subprocess.run(["meshtastic", "--host", bbsIP, "--sendtext", message], check=True)
         print("Meshtastic message sent: ", message)
     except subprocess.CalledProcessError as e:
         print(f"Error sending Meshtastic message: {e}")
 
-
 def create_backup():
+    """Create a backup of the Raspberry Pi's SD card."""
     # Send a message before starting the backup
     send_meshtastic_message("The BBS is currently offline for backup. Please check back later.")
+    
     # Get current date and time
     now = datetime.datetime.now()
     timestamp = now.strftime("%Y%m%d_%H%M%S")
@@ -95,13 +96,26 @@ def create_backup():
     except subprocess.CalledProcessError as e:
         print(f"Error creating backup: {e}")
 
+def clean_filesystem():
+    """Check and clean the filesystem before creating a new backup."""
+    print("Checking the filesystem for errors...")
+    try:
+        subprocess.run(["sudo", "fsck", "-y", pi_device], check=True)
+        print("Filesystem checked and cleaned successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error cleaning filesystem: {e}")
+        sys.exit(1)
+
 if __name__ == "__main__":
     # Ensure the drive is mounted
     if not is_mounted(mount_point):
         print(f"{mount_point} is not mounted. Attempting to mount...")
         mount_drive()
     
-    # Check if there's enough space on the external drive
+    # Clean the filesystem before creating a backup
+    clean_filesystem()
+    
+    # Check if there's enough space on the external drive for the backup
     used_space = get_used_space()
     backup_size = int(used_space * 1.1)
     if shutil.disk_usage(mount_point).free < backup_size:
@@ -110,4 +124,3 @@ if __name__ == "__main__":
     
     create_backup()
     remount_drive()
-   
