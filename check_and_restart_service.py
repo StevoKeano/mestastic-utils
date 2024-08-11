@@ -11,7 +11,7 @@ def check_service_status():
         )
 
         # Check if "BrokenPipeError" is in the output
-        if "BrokenPipeError: [Errno 32] Broken pipe" in result.stdout or "BrokenPipeError: [Errno 32] Broken pipe" in result.stderr:
+        if "ERROR - Unexpected OSError" in result.stdout or "BrokenPipeError: [Errno 32] Broken pipe" in result.stdout or "BrokenPipeError: [Errno 32] Broken pipe" in result.stderr:
             print("BrokenPipeError detected. Restarting the service...")
             restart_service()
         else:

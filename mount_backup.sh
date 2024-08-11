@@ -1,8 +1,35 @@
 #!/bin/bash
 
 # Define variables
-IMAGE_PATH="/media/stevo/sga3/pi_backup_20240809_002357.img"
+IMAGE_DIR="/media/stevo/sga3"
 MOUNT_POINT="/mnt/pi_backup"
+
+# List all matching image files and store them in an array
+mapfile -t IMAGE_FILES < <(ls "$IMAGE_DIR"/pi_backup_*.img 2>/dev/null)
+
+# Check if any image files were found
+if [ ${#IMAGE_FILES[@]} -eq 0 ]; then
+    echo "No backup image files found in $IMAGE_DIR."
+    exit 1
+fi
+
+# Display the list of image files with indices
+echo "Available backup image files:"
+for i in "${!IMAGE_FILES[@]}"; do
+    echo "[$i] ${IMAGE_FILES[$i]}"
+done
+
+# Prompt the user to select an image file by index
+read -p "Enter the index of the image file to use: " INDEX
+
+# Validate the user's input
+if [[ ! "$INDEX" =~ ^[0-9]+$ ]] || [ "$INDEX" -ge ${#IMAGE_FILES[@]} ]; then
+    echo "Invalid selection. Exiting."
+    exit 1
+fi
+
+# Set the selected image path
+IMAGE_PATH="${IMAGE_FILES[$INDEX]}"
 
 # Check partitions in the backup image
 echo "Checking partitions in the backup image..."
@@ -10,7 +37,7 @@ fdisk -l "$IMAGE_PATH"
 
 # Set up a loop device for the image
 echo "Setting up loop device..."
-LOOP_DEVICE=$(sudo losetup -fP "$IMAGE_PATH")
+LOOP_DEVICE=$(sudo losetup -fP --show "$IMAGE_PATH")
 
 # Create mount point if it doesn't exist
 if [ ! -d "$MOUNT_POINT" ]; then
