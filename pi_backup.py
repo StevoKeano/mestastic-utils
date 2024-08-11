@@ -98,7 +98,7 @@ def clean_filesystem():
     try:
         subprocess.run(["sudo", "fsfreeze", "-f", "/"], check=True)
         print("Checking the filesystem for errors...")
-        subprocess.run(["sudo", "fsck", "-y", pi_device], check=True)
+        subprocess.run(["sudo", "fsck", "-y", "-v", pi_device], check=True)
         print("Filesystem checked and cleaned successfully.")
     except subprocess.CalledProcessError as e:
         print(f"Error cleaning filesystem: {e}")
