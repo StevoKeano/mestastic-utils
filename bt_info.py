@@ -1,7 +1,6 @@
 import asyncio
-from bleak import BleakScanner
 import subprocess
-import sys
+from bleak import BleakScanner, BleakClient
 
 async def scan_bluetooth_devices():
     print("Scanning for Bluetooth devices...")
@@ -28,29 +27,47 @@ def get_user_selection(devices):
         except ValueError:
             print("Please enter a valid number.")
 
-def run_meshtastic_info(device_address):
+async def connect_device(address):
+    print(f"Attempting to connect to device: {address}")
+    async with BleakClient(address) as client:
+        if client.is_connected:
+            print("Successfully connected to the BLE device.")
+            return True
+        else:
+            print("Failed to connect to the BLE device.")
+            return False
+
+def run_meshtastic_info(address):
     try:
-        result = subprocess.run(["meshtastic", "--info", "--host", device_address], 
-                                capture_output=True, text=True, check=True)
-        print("Meshtastic Info:")
-        print(result.stdout)
-    except subprocess.CalledProcessError as e:
-        print(f"Error running Meshtastic command: {e}")
-        print(f"Error output: {e.stderr}")
-    except FileNotFoundError:
-        print("Meshtastic CLI not found. Make sure it's installed and in your PATH.")
+        print(f"Running 'meshtastic --info --ble {address}'...")
+        result = subprocess.run(
+            ["meshtastic", "--info", "--ble", address],
+            capture_output=True,
+            text=True
+        )
+        print("Meshtastic Info:\n", result.stdout)
+        if result.stderr:
+            print("Meshtastic Errors:\n", result.stderr)
+    except Exception as e:
+        print(f"Failed to run Meshtastic command: {e}")
 
 async def main():
     devices = await scan_bluetooth_devices()
     display_devices(devices)
     
     if not devices:
-        sys.exit(1)
+        return  # Exit if no devices found
     
     selected_device = get_user_selection(devices)
     print(f"Selected device: Address: {selected_device.address}, Name: {selected_device.name or 'Unknown'}")
     
-    run_meshtastic_info(selected_device.address)
+    connected = await connect_device(selected_device.address)
+    
+    if connected:
+        print("Successfully connected to the BLE device.")
+        run_meshtastic_info(selected_device.address)
+    else:
+        print("Failed to connect to the BLE device. Please try again.")
 
 if __name__ == "__main__":
     asyncio.run(main())
