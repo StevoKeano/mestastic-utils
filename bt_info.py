@@ -15,7 +15,7 @@ def display_devices(devices):
 
     print(f"Found {len(devices)} devices:")
     for i, device in enumerate(devices, 1):
-        print(f"{i}. Address: {device.address}, Name {i}: {device.name or 'Unknown'}")
+        print(f"{i}. Address: {device.address}, Name: {device.name or 'Unknown'}")
 
 def get_user_selection(devices):
     while True:
@@ -43,7 +43,7 @@ def run_meshtastic_info(address):
             print(result.stdout)
             return True
         except subprocess.CalledProcessError:
-            # Display error message without crashing
+            # Suppress detailed error output during the first attempt
             print("Error retrieving Meshtastic info. The device might not be properly paired.")
             if attempt < 2:
                 input("Please complete the pairing process on your computer if prompted, then press Enter to retry...")
@@ -65,12 +65,10 @@ async def main():
     
     selected_device = get_user_selection(devices)
     print(f"Selected device: Address: {selected_device.address}, Name: {selected_device.name or 'Unknown'}")
-
-    # Check if the device is already paired
+    
     input("Please ensure the device is paired on your computer. Press Enter to continue...")
     time.sleep(2)  # Pause briefly to allow pairing process to complete
 
-    # Attempt to run the Meshtastic command directly
     success = run_meshtastic_info(selected_device.address)
     
     if success:
