@@ -9,16 +9,12 @@ from math import radians, sin, cos, sqrt, atan2
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 6371  # Earth's radius in kilometers
-
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     dlat = lat2 - lat1
     dlon = lon2 - lon1
-
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     c = 2 * atan2(sqrt(a), sqrt(1-a))
-    distance = R * c
-
-    return distance
+    return R * c
 
 def get_node_data(host_ip):
     print(f"Connecting to Meshtastic node at {host_ip}...")
@@ -61,6 +57,36 @@ def get_node_data(host_ip):
     print("Connection closed.")
     return data
 
+def get_color_for_distance(distance):
+    # ROYGBIV color scheme
+    colors = [
+        (255, 165, 0),   # Orange
+        (255, 0, 0),     # Red
+        (255, 255, 0),   # Yellow
+        (0, 255, 0),     # Green
+        (0, 255, 255),   # Blue
+        (0, 0, 255),     # Indigo
+        (143, 0, 255)    # Violet
+    ]
+    
+    # Normalize distance to 0-1 range
+    t = min(distance / 3.5, 1.0)
+    
+    # Find the two colors to interpolate between
+    idx = int(t * (len(colors) - 1))
+    if idx == len(colors) - 1:
+        return f'rgb{colors[-1]}'
+    
+    # Interpolate between the two colors
+    color1 = colors[idx]
+    color2 = colors[idx + 1]
+    f = t * (len(colors) - 1) - idx
+    r = int(color1[0] * (1-f) + color2[0] * f)
+    g = int(color1[1] * (1-f) + color2[1] * f)
+    b = int(color1[2] * (1-f) + color2[2] * f)
+    
+    return f'rgb({r},{g},{b})'
+
 def create_dynamic_heatmap(data):
     if not data:
         print("No data available for heatmap.")
@@ -75,28 +101,39 @@ def create_dynamic_heatmap(data):
         lats = []
         lons = []
         colors = []
-        sizes = []
+        hover_texts = []
 
-        for i in range(50):  # Create 50 concentric circles for each node
-            radius = i * 0.06  # 3km / 50 = 0.06km per step
+        for radius in np.arange(0, 3.6, 0.1):  # 0 to 3.5km in 0.1km steps
+            color = get_color_for_distance(radius)
+
             for angle in range(0, 360, 10):  # Create points around the circle
                 lat = node['latitude'] + (radius / 111.32) * cos(radians(angle))
                 lon = node['longitude'] + (radius / (111.32 * cos(radians(node['latitude'])))) * sin(radians(angle))
                 lats.append(lat)
                 lons.append(lon)
-                colors.append(f"rgba(255, 165, 0, {1 - i/50})")  # Transition from orange to transparent
-                sizes.append(5)  # Constant size for all points
+                colors.append(color)
+                
+                if radius <= 0.3:
+                    hover_texts.append(f"Short Name: {node['short_name']}<br>"
+                                       f"Long Name: {node['long_name']}<br>"
+                                       f"Latitude: {node['latitude']:.6f}<br>"
+                                       f"Longitude: {node['longitude']:.6f}<br>"
+                                       f"SNR: {node['snr']}<br>"
+                                       f"Last Heard: {node['last_heard']}")
+                else:
+                    hover_texts.append(None)
 
         fig.add_trace(go.Scattermapbox(
             lat=lats,
             lon=lons,
             mode='markers',
             marker=dict(
-                size=sizes,
+                size=5,
                 color=colors,
                 opacity=0.7
             ),
-            hoverinfo='none',
+            text=hover_texts,
+            hoverinfo='text',
             showlegend=False
         ))
 
@@ -107,7 +144,7 @@ def create_dynamic_heatmap(data):
         mode='markers',
         marker=dict(
             size=10,
-            color='red',
+            color='black',
             opacity=1
         ),
         text=df.apply(lambda row: f"Short Name: {row['short_name']}<br>"
@@ -120,18 +157,23 @@ def create_dynamic_heatmap(data):
     ))
 
     fig.update_layout(
-        title='Meshtastic Node SNR Heatmap (3km radius)',
+        title='Meshtastic Node SNR Heatmap (3.5km radius)',
         mapbox_style="open-street-map",
         mapbox=dict(
             center=dict(lat=df['latitude'].mean(), lon=df['longitude'].mean()),
             zoom=10
         ),
         showlegend=False,
-        height=800
+        height=800,
+        hoverlabel=dict(
+            bgcolor="rgba(0, 0, 255, 0.8)",  # Blue background for hover label
+            font_size=12,
+            font_family="Rockwell"
+        )
     )
 
-    fig.write_html("dynamic_snr_heatmap_3km.html")
-    print("Dynamic heatmap saved as dynamic_snr_heatmap_3km.html")
+    fig.write_html("dynamic_snr_heatmap_3.5km_roygbiv.html")
+    print("Dynamic heatmap saved as dynamic_snr_heatmap_3.5km_roygbiv.html")
 
 def main():
     host_ip = "192.168.1.95"  # The IP address of your Meshtastic node
