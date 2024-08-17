@@ -1,4 +1,6 @@
 import numpy as np
+from tqdm import tqdm
+import time
 import matplotlib.pyplot as plt
 from srtm import get_data
 import matplotlib.colors as colors
@@ -63,6 +65,42 @@ def line_of_sight(start_lat, start_lon, end_lat, end_lon, start_height, end_heig
     visibility_threshold = 0
     return angle > visibility_threshold
 
+def line_of_sight(start_lat, start_lon, end_lat, end_lon, start_height, end_height):
+    try:
+        start_elev = srtm_data.get_elevation(start_lat, start_lon)
+        end_elev = srtm_data.get_elevation(end_lat, end_lon)
+        
+        if start_elev is None or end_elev is None:
+            return False
+
+        distance = haversine_distance(start_lat, start_lon, end_lat, end_lon)
+        
+        start_total_height = start_elev + start_height
+        end_total_height = end_elev + end_height
+        
+        elevation_difference = end_total_height - start_total_height
+        angle = np.arctan2(elevation_difference, distance * 1000)
+        
+        steps = 100
+        for i in range(1, steps):
+            fraction = i / steps
+            inter_lat = start_lat + fraction * (end_lat - start_lat)
+            inter_lon = start_lon + fraction * (end_lon - start_lon)
+            inter_elev = srtm_data.get_elevation(inter_lat, inter_lon)
+            
+            if inter_elev is None:
+                continue
+            
+            inter_distance = fraction * distance
+            expected_height = start_total_height + fraction * elevation_difference
+            if inter_elev > expected_height:
+                return False
+
+        return True
+    except Exception as e:
+        print(f"Error in line_of_sight: {str(e)}")
+        print(f"Start: {start_lat}, {start_lon}, End: {end_lat}, {end_lon}")
+        return False
 def generate_los_map(point1, point2, radius_miles=30):
     radius_km = radius_miles * 1.60934
     resolution = 300
@@ -72,30 +110,49 @@ def generate_los_map(point1, point2, radius_miles=30):
     center_lat = (point1['lat'] + point2['lat']) / 2
     center_lon = (point1['lon'] + point2['lon']) / 2
 
-    for i in range(resolution):
-        for j in range(resolution):
-            angle = 2 * np.pi * i / resolution
-            distance = radius_km * j / (resolution - 1)
+    print(f"Center coordinates: {center_lat}, {center_lon}")
+    print(f"Starting LOS map generation for {resolution}x{resolution} grid")
 
-            target_lat = center_lat + (distance / 111.32) * np.cos(angle)
-            target_lon = center_lon + (distance / (111.32 * np.cos(np.radians(center_lat)))) * np.sin(angle)
+    total_iterations = resolution * resolution
+    start_time = time.time()
 
-            elevation = srtm_data.get_elevation(target_lat, target_lon)
-            elevations[i, j] = elevation if elevation is not None else 0
+    try:
+        with tqdm(total=total_iterations, desc="Generating LOS map", unit="cell") as pbar:
+            for i in range(resolution):
+                for j in range(resolution):
+                    angle = 2 * np.pi * i / resolution
+                    distance = radius_km * j / (resolution - 1)
 
-            if line_of_sight(point1['lat'], point1['lon'], target_lat, target_lon, point1['height'], 0) or \
-               line_of_sight(point2['lat'], point2['lon'], target_lat, target_lon, point2['height'], 0):
-                los_map[i, j] = 1
-            else:
-                los_map[i, j] = 0
+                    target_lat = center_lat + (distance / 111.32) * np.cos(angle)
+                    target_lon = center_lon + (distance / (111.32 * np.cos(np.radians(center_lat)))) * np.sin(angle)
 
-    print("LOS map statistics:")
+                    elevation = srtm_data.get_elevation(target_lat, target_lon)
+                    elevations[i, j] = elevation if elevation is not None else 0
+
+                    if line_of_sight(point1['lat'], point1['lon'], target_lat, target_lon, point1['height'], 0) or \
+                       line_of_sight(point2['lat'], point2['lon'], target_lat, target_lon, point2['height'], 0):
+                        los_map[i, j] = 1
+                    else:
+                        los_map[i, j] = 0
+                    
+                    pbar.update(1)
+
+    except Exception as e:
+        print(f"Error occurred at i={i}, j={j}")
+        print(f"Current target: lat={target_lat}, lon={target_lon}")
+        print(f"Exception: {str(e)}")
+        raise
+
+    end_time = time.time()
+    total_time = end_time - start_time
+
+    print("\nLOS map statistics:")
     print(f"Total cells: {los_map.size}")
     print(f"Visible cells: {np.sum(los_map == 1)}")
     print(f"Non-visible cells: {np.sum(los_map == 0)}")
+    print(f"Total computation time: {total_time:.2f} seconds")
 
     return los_map, elevations, center_lat, center_lon
-
 def plot_los_map(los_map, elevations, center_lat, center_lon, point1, point2):
     fig = plt.figure(figsize=(15, 15))
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
@@ -121,7 +178,7 @@ def plot_los_map(los_map, elevations, center_lat, center_lon, point1, point2):
                                  center_lat - extent_deg, center_lat + extent_deg], 
                          transform=ccrs.PlateCarree(), alpha=0.5, zorder=2)
 
-    # Add 1km red circles around both points
+    # Add 1km circles around both points
     circle_radius = 1 / 111.32
     ax.add_patch(Circle((point1['lon'], point1['lat']), circle_radius, 
                         fill=False, edgecolor='red', linewidth=2, 
@@ -129,6 +186,12 @@ def plot_los_map(los_map, elevations, center_lat, center_lon, point1, point2):
     ax.add_patch(Circle((point2['lon'], point2['lat']), circle_radius, 
                         fill=False, edgecolor='blue', linewidth=2, 
                         transform=ccrs.PlateCarree(), zorder=3))
+
+    # Add labels for Point 1 and Point 2
+    ax.text(point1['lon'], point1['lat'], 'Point 1', color='red', fontweight='bold', 
+            ha='right', va='bottom', transform=ccrs.PlateCarree())
+    ax.text(point2['lon'], point2['lat'], 'Point 2', color='blue', fontweight='bold', 
+            ha='left', va='top', transform=ccrs.PlateCarree())
 
     plt.title('Line of Sight Map with OpenStreetMap Background (30-mile Radius)')
     ax.gridlines(draw_labels=True, zorder=4)
@@ -139,7 +202,7 @@ def plot_los_map(los_map, elevations, center_lat, center_lon, point1, point2):
     ax.plot([], [], color='black', linewidth=5, label='No line of sight')
     ax.legend(loc='upper right')
 
-    plt.show()
+ 
 
 def main():
     last_settings = load_last_settings()
@@ -168,6 +231,12 @@ def main():
         'height': float(height2) if height2 else last_settings['point2']['height']
     }
     
+    # Option to reverse points
+    reverse = input("\nDo you want to reverse the points? (y/n, default: n): ").lower().strip()
+    if reverse == 'y':
+        point1, point2 = point2, point1
+        print("Points reversed.")
+    
     # Save new settings
     save_settings({"point1": point1, "point2": point2})
 
@@ -179,6 +248,9 @@ def main():
     print("LOS map contains zeros:", np.any(los_map == 0))
 
     plot_los_map(los_map, elevations, center_lat, center_lon, point1, point2)
+    
+    print("\nMap displayed. Close the map window to exit the program.")
+    plt.show(block=True)  # This will block until the user closes the plot window
 
 if __name__ == "__main__":
     main()
