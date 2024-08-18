@@ -336,15 +336,21 @@ def find_intersection(ray_start, ray_end, elevations, distances):
 def plot_cross_section(point1, point2):
     print("Starting plot_cross_section function...")
     
-    # Generate elevation profile
-    latitudes = np.linspace(point1['lat'], point2['lat'], num=100)
-    longitudes = np.linspace(point1['lon'], point2['lon'], num=100)
+    # Determine which point is westernmost
+    if point1['lon'] > point2['lon']:
+        west_point, east_point = point2, point1
+    else:
+        west_point, east_point = point1, point2
+    
+    # Generate elevation profile from west to east
+    latitudes = np.linspace(west_point['lat'], east_point['lat'], num=100)
+    longitudes = np.linspace(west_point['lon'], east_point['lon'], num=100)
     elevations = [srtm_data.get_elevation(lat, lon) for lat, lon in zip(latitudes, longitudes)]
     
     print("Elevation profile generated.")
     
     # Calculate the total distance between the two points
-    distance_km = haversine_distance(point1['lat'], point1['lon'], point2['lat'], point2['lon'])
+    distance_km = haversine_distance(west_point['lat'], west_point['lon'], east_point['lat'], east_point['lon'])
     
     print(f"Total distance between points: {distance_km:.2f} km")
     
@@ -366,28 +372,28 @@ def plot_cross_section(point1, point2):
     ])
     
     # Plot Points 1 and 2
-    ax1.plot(point1['lon'], point1['lat'], 'ro', markersize=10, transform=ccrs.PlateCarree(), label='Point 1')
-    ax1.plot(point2['lon'], point2['lat'], 'bo', markersize=10, transform=ccrs.PlateCarree(), label='Point 2')
+    ax1.plot(west_point['lon'], west_point['lat'], 'ro', markersize=10, transform=ccrs.PlateCarree(), label='West Point')
+    ax1.plot(east_point['lon'], east_point['lat'], 'bo', markersize=10, transform=ccrs.PlateCarree(), label='East Point')
     
     # Add 1km circles around Points 1 and 2
     circle_radius = 1 / 111.32  # 1km in degrees
-    ax1.add_patch(Circle((point1['lon'], point1['lat']), circle_radius, 
+    ax1.add_patch(Circle((west_point['lon'], west_point['lat']), circle_radius, 
                          fill=False, edgecolor='red', transform=ccrs.PlateCarree()))
-    ax1.add_patch(Circle((point2['lon'], point2['lat']), circle_radius, 
+    ax1.add_patch(Circle((east_point['lon'], east_point['lat']), circle_radius, 
                          fill=False, edgecolor='blue', transform=ccrs.PlateCarree()))
     
     # Plot elevation profile
     ax2.plot(np.linspace(0, distance_km, num=100), elevations, color='blue', label='Elevation Profile')
     
-    # Get the height of Point 1 and Point 2
-    p1_elevation = point1['height'] + srtm_data.get_elevation(point1['lat'], point1['lon'])
-    p2_elevation = point2['height'] + srtm_data.get_elevation(point2['lat'], point2['lon'])
+    # Get the height of west and east points
+    west_elevation = west_point['height'] + srtm_data.get_elevation(west_point['lat'], west_point['lon'])
+    east_elevation = east_point['height'] + srtm_data.get_elevation(east_point['lat'], east_point['lon'])
 
-    print(f"Point 1 elevation: {p1_elevation:.2f} m")
-    print(f"Point 2 elevation: {p2_elevation:.2f} m")
+    print(f"West point elevation: {west_elevation:.2f} m")
+    print(f"East point elevation: {east_elevation:.2f} m")
 
-    # Draw the line between Point 1 and Point 2
-    ax2.plot([0, distance_km], [p1_elevation, p2_elevation], color='black', label='Line from Point 1 to Point 2')
+    # Draw the line between west and east points
+    ax2.plot([0, distance_km], [west_elevation, east_elevation], color='black', label='Line from West to East')
 
     # Prepare to store ray information
     ray_info = []
@@ -400,12 +406,12 @@ def plot_cross_section(point1, point2):
     highest_elev = elevations[highest_elev_index]
     highest_elev_distance = distances[highest_elev_index]
 
-    # Draw the first ray from Point 1 to the highest elevation point
-    ax2.plot([0, highest_elev_distance], [p1_elevation, highest_elev], color='red', linewidth=2, label='First Ray (To Highest Point)')
-    first_ray_angle = np.degrees(np.arctan2(highest_elev - p1_elevation, highest_elev_distance))
+    # Draw the first ray from west point to the highest elevation point
+    ax2.plot([0, highest_elev_distance], [west_elevation, highest_elev], color='red', linewidth=2, label='First Ray (To Highest Point)')
+    first_ray_angle = np.degrees(np.arctan2(highest_elev - west_elevation, highest_elev_distance))
     ray_info.append((1, first_ray_angle, highest_elev_distance))
 
-    # Draw subsequent lines from Point 1 to 50 feet below Point 2 until elevation reaches 0
+    # Draw subsequent lines from the highest elevation point to 50 feet below east point until elevation reaches 0
     current_elevation = highest_elev
     ray_number = 1  # Start from 2 as we've already drawn the first ray
     angle = first_ray_angle  # Initialize angle with the first ray's angle
@@ -416,7 +422,7 @@ def plot_cross_section(point1, point2):
     with tqdm(total=90, desc="Processing rays") as pbar:
         while angle > -89:
             # Calculate the angle for the ray
-            angle = np.degrees(np.arctan2(current_elevation - p1_elevation, distance_km))  # Angle in degrees
+            angle = np.degrees(np.arctan2(current_elevation - west_elevation, distance_km))  # Angle in degrees
 
             print(f"Processing ray {ray_number + 1} at angle {angle:.2f} degrees")
 
@@ -424,18 +430,18 @@ def plot_cross_section(point1, point2):
             ray_end = (distance_km, current_elevation)
 
             # Find intersection
-            intersection_point = find_intersection((0, p1_elevation), ray_end, elevations, distances)
+            intersection_point = find_intersection((0, west_elevation), ray_end, elevations, distances)
 
             if intersection_point:
                 x_intersect, y_intersect, horizontal_component = intersection_point
                 # Plot the ray up to the intersection point
-                ax2.plot([0, x_intersect], [p1_elevation, y_intersect], color='black', alpha=0.3)
+                ax2.plot([0, x_intersect], [west_elevation, y_intersect], color='black', alpha=0.3)
                 # Store ray information
                 ray_info.append((ray_number + 1, angle, horizontal_component))
                 print(f"Ray {ray_number + 1} intersects at {x_intersect:.2f} km")
             else:
                 # If no intersection, plot the full ray
-                ax2.plot([0, distance_km], [p1_elevation, current_elevation], color='black', alpha=0.3)
+                ax2.plot([0, distance_km], [west_elevation, current_elevation], color='black', alpha=0.3)
                 ray_info.append((ray_number + 1, angle, distance_km))
                 print(f"Ray {ray_number + 1} does not intersect")
 
@@ -447,17 +453,17 @@ def plot_cross_section(point1, point2):
 
     print("Ray tracing completed.")
 
-    ax2.axhline(y=p1_elevation, color='red', linestyle='--', label='Point 1 Height')
-    ax2.axhline(y=p2_elevation, color='green', linestyle='--', label='Point 2 Height')
+    ax2.axhline(y=west_elevation, color='red', linestyle='--', label='West Point Height')
+    ax2.axhline(y=east_elevation, color='blue', linestyle='--', label='East Point Height')
 
-    # Add labels for Point 1 and Point 2 with coordinates
-    ax2.text(0, p1_elevation + 5, f'Point 1\n({point1["lat"]:.6f}, {point1["lon"]:.6f})', 
-             color='red', fontsize=10, ha='center')
+    # Add labels for west and east points with coordinates
+    ax2.text(0, west_elevation + 5, f'West Point\n({west_point["lat"]:.6f}, {west_point["lon"]:.6f})', 
+             color='red', fontsize=10, ha='left', va='bottom')
     ax2.text(distance_km, 
-             p2_elevation + 5, f'Point 2\n({point2["lat"]:.6f}, {point2["lon"]:.6f})', 
-             color='green', fontsize=10, ha='center')
+             east_elevation + 5, f'East Point\n({east_point["lat"]:.6f}, {east_point["lon"]:.6f})', 
+             color='blue', fontsize=10, ha='right', va='bottom')
 
-    ax2.set_title('Elevation Profile with Rays Towards Point 2')
+    ax2.set_title('Elevation Profile with Rays (West to East)')
     ax2.set_xlabel('Distance (km)')
     ax2.set_ylabel('Elevation (m)')
     ax2.grid()
@@ -467,11 +473,11 @@ def plot_cross_section(point1, point2):
     for _, _, intersection_distance in ray_info:
         # Calculate the position of the intersection point
         frac = intersection_distance / distance_km
-        lat = point1['lat'] + frac * (point2['lat'] - point1['lat'])
-        lon = point1['lon'] + frac * (point2['lon'] - point1['lon'])
+        lat = west_point['lat'] + frac * (east_point['lat'] - west_point['lat'])
+        lon = west_point['lon'] + frac * (east_point['lon'] - west_point['lon'])
         ax1.plot(lon, lat, 'ko', markersize=3, transform=ccrs.PlateCarree())
 
-    ax1.set_title('Map with Intersection Points')
+    ax1.set_title('Map with Intersection Points (West to East)')
     ax1.legend()
 
     # Print the ray information table
