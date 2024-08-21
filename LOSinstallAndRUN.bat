@@ -32,6 +32,15 @@ REM Install specific version of SRTM.py
 pip install https://files.pythonhosted.org/packages/e6/07/1dc35011d5e68b6c873632fe07a517a1ad484bf4757ae4736320c4cab8ef/SRTM.py-0.3.7.tar.gz
 
 echo All packages installed.
+@echo off
+echo.
+echo  _      ____   _____       ___    ____  ____  
+echo ^| ^|    / __ \ / ____^|     / _ \  ^|  _ \^|  _ \ 
+echo ^| ^|   ^| ^|  ^| ^| (___      / /_\ \ ^| ^|_) ^| ^|_) ^|
+echo ^| ^|   ^| ^|  ^| ^|\___ \    / _____ \^|  ___/  __/ 
+echo ^| ^|___^| ^|__^| ^|____) ^|  / /     \ \ ^|   ^| ^|   
+echo ^|______\____/^|_____/  /_/       \_\_^|   ^|_^|  
+echo.
 
 REM Run your Python script
 python los5.5.py
