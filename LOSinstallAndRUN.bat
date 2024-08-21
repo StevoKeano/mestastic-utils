@@ -1,5 +1,4 @@
 @echo off
-@echo off
 
 REM Check if LOS5.5.py exists
 if exist LOS5.5.py (
