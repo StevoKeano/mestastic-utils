@@ -16,34 +16,54 @@ from tqdm import tqdm
 import time
 import tkinter as tk
 from tkinter import ttk
+import tkintermapview
 
 # Initialize SRTM data
 srtm_data = get_data()
 
 
-
 def map_point_picker(last_settings):
-    def on_map_click(event):
-        if event.button == 1 and event.xdata is not None and event.ydata is not None:  # Left click within map area
-            lon, lat = event.xdata, event.ydata
-            if point_select.get() == "Point 1":
-                point1_var.set(f"Point 1: {lat:.6f}, {lon:.6f}")
-            else:
-                point2_var.set(f"Point 2: {lat:.6f}, {lon:.6f}")
+    def on_map_click(coords):
+        lat, lon = coords
+        if point_select.get() == "Point 1":
+            point1_var.set(f"Point 1: {lat:.6f}, {lon:.6f}")
+        else:
+            point2_var.set(f"Point 2: {lat:.6f}, {lon:.6f}")
 
     def close_window():
+        global new_settings
+        # Extract coordinates from StringVars
+        point1_coords = point1_var.get().split(": ")[1].split(", ")
+        point2_coords = point2_var.get().split(": ")[1].split(", ")
+
+        new_settings = {
+            "point1": {"lat": float(point1_coords[0]), "lon": float(point1_coords[1]), "height": last_settings['point1']['height']},
+            "point2": {"lat": float(point2_coords[0]), "lon": float(point2_coords[1]), "height": last_settings['point2']['height']}
+        }
+    
+        # Cancel all scheduled tasks
+        for task in root.tk.call('after', 'info'):
+            root.after_cancel(task)
+    
+        # Destroy all child widgets
+        for widget in root.winfo_children():
+            try:
+                widget.destroy()
+            except tk.TclError:
+                pass  # Ignore errors during widget destruction
+    
+        # Quit the main loop
         root.quit()
-        root.destroy()
 
     root = tk.Tk()
     root.title("Map Point Picker")
+    root.geometry("800x600")
 
     frame = ttk.Frame(root, padding="10")
-    frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+    frame.pack(fill=tk.BOTH, expand=True)
 
-    # Create a frame for the dropdown and button
     control_frame = ttk.Frame(frame)
-    control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E))
+    control_frame.pack(fill=tk.X)
 
     point_select = ttk.Combobox(control_frame, values=["Point 1", "Point 2"])
     point_select.set("Point 1")
@@ -54,34 +74,34 @@ def map_point_picker(last_settings):
     point1_var = tk.StringVar(value=f"Point 1: {last_settings['point1']['lat']:.6f}, {last_settings['point1']['lon']:.6f}")
     point2_var = tk.StringVar(value=f"Point 2: {last_settings['point2']['lat']:.6f}, {last_settings['point2']['lon']:.6f}")
 
-    ttk.Label(frame, textvariable=point1_var).grid(row=1, column=0, columnspan=2)
-    ttk.Label(frame, textvariable=point2_var).grid(row=2, column=0, columnspan=2)
+    ttk.Label(frame, textvariable=point1_var).pack()
+    ttk.Label(frame, textvariable=point2_var).pack()
 
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+    map_widget = tkintermapview.TkinterMapView(frame, width=800, height=600)
+    map_widget.pack(fill=tk.BOTH, expand=True)
 
-    map_tiles = cimgt.OSM()
-    ax.add_image(map_tiles, 8)  # Adjust zoom level as needed
+    # Set initial map position
+    map_widget.set_position(last_settings['point1']['lat'], last_settings['point1']['lon'])
+    map_widget.set_zoom(8)
 
-    # Set initial map extent (you may want to adjust this based on your default points)
-    ax.set_extent([last_settings['point1']['lon'] - 1, last_settings['point1']['lon'] + 1,
-                   last_settings['point1']['lat'] - 1, last_settings['point1']['lat'] + 1])
-
-    canvas = FigureCanvasTkAgg(fig, master=frame)
-    canvas.draw()
-    canvas.mpl_connect('button_press_event', on_map_click)
-    canvas.get_tk_widget().grid(row=3, column=0, columnspan=2)
+    map_widget.add_left_click_map_command(on_map_click)
 
     root.mainloop()
 
-    # Extract coordinates from StringVars
-    point1_coords = point1_var.get().split(": ")[1].split(", ")
-    point2_coords = point2_var.get().split(": ")[1].split(", ")
+    # Explicitly destroy the root window
+    root.destroy()
 
-    return {
-        "point1": {"lat": float(point1_coords[0]), "lon": float(point1_coords[1]), "height": last_settings['point1']['height']},
-        "point2": {"lat": float(point2_coords[0]), "lon": float(point2_coords[1]), "height": last_settings['point2']['height']}
-    }
+    try:
+        root.mainloop()
+    except tk.TclError as e:
+        print(f"PLEASE IGNORE... Caught TclError during mainloop: {e}")
+    finally:
+        try:
+            root.destroy()
+        except tk.TclError as e:
+            print(f"PLEASE IGNORE... Caught TclError during root destruction: {e}")
+
+    return new_settings
 
 def image_spoof(self, tile):
     url = self._image_url(tile)
@@ -482,7 +502,13 @@ def main():
     use_map = input("Do you want to pick points from a map? (y/n): ").lower().strip() == 'y'
     
     if use_map:
-        new_settings = map_point_picker(last_settings)
+        try:
+            new_settings = map_point_picker(last_settings)
+        except tk.TclError as e:
+            if "invalid command name" in str(e):
+                print("Ignoring TclError during window closure. This is likely harmless.")
+            else:
+                raise  # Re-raise the exception if it's not the one we're expecting
         point1 = new_settings['point1']
         point2 = new_settings['point2']
     else:

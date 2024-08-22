@@ -1,4 +1,5 @@
 @echo off
+@echo off
 
 REM Check if LOS5.5.py exists
 if exist LOS5.5.py (
@@ -38,7 +39,7 @@ if errorlevel 1 (
 echo Virtual environment is now active.
 
 REM Install packages
-for %%p in (numpy matplotlib cartopy pillow tqdm scipy pykdtree) do (
+for %%p in (numpy matplotlib cartopy pillow tqdm scipy pykdtree tkintermapview) do (
     pip install %%p
 )
 
