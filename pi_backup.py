@@ -81,21 +81,21 @@ def delete_old_backups(backup_dir, days_old=7):
     cutoff_time = current_time - timedelta(days=days_old)
 
     for filename in os.listdir(backup_dir):
-        if filename.startswith("pi_backup_") and filename.endswith(".img"):
+        if (filename.startswith("pi_backup_") and filename.endswith(".img")) or \
+           (filename.startswith("bbs1_") and filename.endswith(".img.gz")):
             file_path = os.path.join(backup_dir, filename)
             file_modification_time = datetime.fromtimestamp(os.path.getmtime(file_path))
             
             if file_modification_time < cutoff_time:
                 try:
-                    os.remove(file_path)
+                    # Use subprocess to remove the file with sudo
+                    subprocess.run(['sudo', 'rm', file_path], check=True)
                     print(f"Deleted old backup: {filename}")
-                except Exception as e:
+                except subprocess.CalledProcessError as e:
                     print(f"Error deleting {filename}: {e}")
-                    send_meshtastic_message(f"Error deleting {filename}: {e}")
+
 # Usage example (add this to your main execution block):
 # delete_old_backups(mount_point)
-
-
 def create_backup():
     # Send a message before starting the backup
     send_meshtastic_message("The BBS is currently offline for backup. Please check back later.")
