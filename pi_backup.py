@@ -100,7 +100,7 @@ def create_backup():
     # Send a message before starting the backup
     send_meshtastic_message("The BBS is currently offline for backup. Please check back later.")
     # Get current date and time
-    now = datetime.datetime.now()
+    now = datetime.now()
     timestamp = now.strftime("%Y%m%d_%H%M%S")
     
     # Calculate backup size
